@@ -1,0 +1,144 @@
+---
+title: "scRNAseq_report"
+author: "Dr. S. Virdi"
+date: "..."
+output:  
+  html_document:
+    toc: true
+runtime: shiny
+---
+
+```{=html}
+<style type="text/css">
+.main-container {
+  max-width: 1800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+```
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(Seurat)
+library(dplyr)
+library(gdata)
+library(ggplot2)
+library(ggrepel)
+library(cowplot)
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+library(clusterProfiler)
+library(SummarizedExperiment)
+library(BiocParallel)
+library(magrittr)
+library(tidyr)
+library(patchwork)
+library(viridis)
+library(pheatmap)
+library(shiny)
+library(htmlwidgets)
+library(DT)
+options(future.globals.maxSize = 1e9)
+options(Seurat.object.assay.version = "v5")
+
+```
+
+
+```{r eruptions, echo=FALSE}
+
+counts_dir1_10x <- "~/Desktop/work_hpi/hpi_projects/scRNAseq/s_albertini/counts_S1/outs/filtered_feature_bc_matrix/"
+counts_dir2_10x <- "~/Desktop/work_hpi/hpi_projects/scRNAseq/s_albertini/counts_S2/outs/filtered_feature_bc_matrix/"
+
+counts_dir <- c(counts_dir1_10x,counts_dir2_10x)
+
+obj_list <- list()
+qc_plot <- list()
+
+for (i in 1:2){
+
+nraw_counts <- Read10X(data.dir = counts_dir[i])
+n = paste0("condition_",i)
+
+#total cell count
+summary(colSums(nraw_counts))
+
+#  Create seuart object
+s1_SO<- CreateSeuratObject(counts = nraw_counts, min.cells = 10, min.features = 200, project = paste0(n,"_10x_scRNAseq"))
+s1_SO[["percent.mt"]] <- PercentageFeatureSet(s1_SO, pattern = "MT-")
+
+#VlnPlot(s1_SO, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+filt1 <- quantile(apply(s1_SO[["RNA"]]$counts, 2, function(x) sum(x > 0)), c(.25, .50,  .75, .90, .99))
+filt2 <- quantile(apply(s1_SO[["RNA"]]$counts, 2, function(x) sum(x)), c(.25, .50,  .75, .90, .99))
+
+s1_SO <- subset(s1_SO, subset =  nFeature_RNA < filt1[5] & nCount_RNA < filt2[5] &  nCount_RNA > 1000 & percent.mt < 10)
+
+obj_list[[i]] <- s1_SO
+
+qc_plot[[i]]  <- VlnPlot(s1_SO, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+
+}
+
+
+
+#######################################
+## SCTransform Harmony Integration ####
+#######################################
+
+ctrl <- obj_list[[1]]
+ctrl$stim <- 'CTRL'
+cond <- obj_list[[2]]
+cond$stim <- 'STIM2'
+obj <- merge(x = ctrl, y = cond)
+
+#obj[["RNA"]] <- split(obj[["RNA"]], f = obj$stim)
+obj_ <- SCTransform(obj, vars.to.regress = c("percent.mt"), vst.flavor = "v2", verbose = FALSE)
+obj_sc <- RunPCA(obj_, npcs = 30, verbose = F)
+
+
+obj_sc <- IntegrateLayers(object = obj_sc, method = HarmonyIntegration,
+                       orig.reduction = "pca", new.reduction = 'harmony',
+                       assay = "SCT", verbose = FALSE)
+obj_sc1 <- FindNeighbors(obj_sc, reduction = "harmony", dims = 1:30)
+
+# res 1.2 for original all cells counts
+obj_sc2 <- FindClusters(obj_sc1, resolution = 1.2, cluster.name = "harmony_clusters")
+
+#
+obj_sc2 <- RunUMAP(obj_sc2, reduction = "harmony", dims = 1:30, reduction.name = "umap.harmony")
+
+
+
+
+########################## Markers ##################################
+
+obj_t <- obj_sc2
+
+DefaultAssay(obj_t) <- "RNA"
+all.genes <- rownames(obj_t)
+obj_t <- NormalizeData(obj_t)
+#obj_t <- ScaleData(obj_t, features = all.genes,vars.to.regress = c("nCount_RNA", "percent.mt"))
+obj_t <- JoinLayers(obj_t)
+
+x <- as.numeric(levels(obj_t$seurat_clusters))
+x <- x[c(1:4)]
+
+df <- data.frame()
+for (i in 1:length(x)){
+c.markers <- FindConservedMarkers(obj_t, ident.1 = x[i], grouping.var = "stim",verbose = FALSE,
+                                    min.pct = 0.25, only.pos = TRUE, logfc.threshold = 0.25) # min.pct = .25 for all
+c.markers <- c.markers[order(c.markers$CTRL_avg_log2FC,decreasing = TRUE),]
+top10 <- c.markers %>% dplyr::top_n(n = 10, wt = CTRL_avg_log2FC)
+
+df <- bind_rows(df,top10)
+}
+
+
+seurat_genes = rownames(obj_t)
+sc <- obj_t
+
+
+# Run the application 
+runApp("~/Desktop/shiny/test/app.R")
+```
