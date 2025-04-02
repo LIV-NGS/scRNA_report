@@ -3,7 +3,7 @@
 
 # scRNA-seq-Report
 
-R markdown document to create html reports for scRNA-seq quantification using 10x-Cellrange and Seurat. 
+R markdown document to create html reports for scRNA-seq quantification using 10x cellranger and Seurat. 
 Following are the steps to use the R markdown script.
 
 The script used salmon quantification using gencode transcripts (download from here: https://www.gencodegenes.org/). 
