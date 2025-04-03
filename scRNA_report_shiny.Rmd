@@ -46,8 +46,8 @@ options(Seurat.object.assay.version = "v5")
 
 ```{r eruptions, echo=FALSE}
 
-counts_dir1_10x <- "~/Desktop/work_hpi/hpi_projects/scRNAseq/s_albertini/counts_S1/outs/filtered_feature_bc_matrix/"
-counts_dir2_10x <- "~/Desktop/work_hpi/hpi_projects/scRNAseq/s_albertini/counts_S2/outs/filtered_feature_bc_matrix/"
+counts_dir1_10x <- ".../outs/filtered_feature_bc_matrix/"
+counts_dir2_10x <- ".../outs/filtered_feature_bc_matrix/"
 
 counts_dir <- c(counts_dir1_10x,counts_dir2_10x)
 
